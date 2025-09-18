@@ -1,6 +1,6 @@
 Project Information : 
 
-LIVE URL : https://ai-lead-scoring-api-1.onrender.com/
+LIVE URL : https://ai-lead-scoring-api-3.onrender.com/
 
 DOCKER HUB: https://hub.docker.com/r/santoshkumar42/lead-scoring-api
 
