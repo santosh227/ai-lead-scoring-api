@@ -8,42 +8,54 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Connect to MongoDB database
-connectionDB();
+// WAIT for MongoDB connection before starting server
+const startServer = async () => {
+  try {
+    // Connect to MongoDB and WAIT for it to complete
+    await connectionDB();
+    
+    // Middleware setup (after DB connection)
+    app.use(express.json({ limit: "10mb" }));
+    app.use(express.urlencoded({ extended: true }));
+    app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Middleware setup
-app.use(express.json({ limit: "10mb" })); // Parse JSON requests with 10MB limit
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded data
-app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // Serve static files
+    // API info
+    app.get("/", (req, res) => {
+      res.json({
+        message: "AI Lead Scoring API",
+        endpoints: {
+          "POST /api/offer": "Submit product/offer information",
+          "POST /api/leads/upload": "Upload CSV with leads",
+          "POST /api/score": "Run AI scoring",
+          "GET /api/results": "Get results",
+          "GET /api/results/csv": "Export CSV",
+        },
+        status: "ready",
+      });
+    });
 
-// Root endpoint - API documentation
-app.get("/", (req, res) => {
-  res.json({
-    message: "AI Lead Scoring API",
-    endpoints: {
-      "POST /api/offer": "Submit product/offer information",
-      "POST /api/leads/upload": "Upload CSV with leads",
-      "POST /api/score": "Run AI scoring",
-      "GET /api/results": "Get results",
-      "GET /api/results/csv": "Export CSV",
-    },
-    status: "ready",
-  });
-});
+    // API routes
+    app.use("/api", apiRoutes);
 
-// Mount API routes under /api prefix
-app.use("/api", apiRoutes);
+    // 404 handler
+    app.use((req, res) => {
+      res.status(404).json({
+        error: "Endpoint not found",
+        message: `${req.method} ${req.originalUrl} not found`,
+      });
+    });
 
-// Handle undefined routes
-app.use((req, res) => {
-  res.status(404).json({
-    error: "Endpoint not found",
-    message: `${req.method} ${req.originalUrl} not found`,
-  });
-});
+    // Start server ONLY after DB is connected
+    app.listen(PORT, () => {
+      console.log(`AI Lead Scoring API running on port ${PORT}`);
+      console.log("MongoDB connected successfully");
+    });
+    
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
+};
 
 // Start the server
-app.listen(PORT, () => {
-  console.log(`AI Lead Scoring API running on port ${PORT}`);
-  console.log("MongoDB connected successfully");
-});
+startServer();

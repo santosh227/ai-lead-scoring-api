@@ -11,10 +11,16 @@ const connectionDB = async () => {
       bufferCommands: false, // Don't buffer commands
     };
 
+    // AWAIT the connection
     await mongoose.connect(process.env.MONGO_URI, options);
     console.log("data base connected successfully");
+    
+    // Return success
+    return true;
+    
   } catch (error) {
     console.log("database connection issue", error);
+    throw error; // Throw error so server startup fails
   }
 };
 
