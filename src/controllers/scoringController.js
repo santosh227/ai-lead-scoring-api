@@ -3,14 +3,17 @@ const Offer = require('../models/Offer');
 const Lead = require('../models/Lead');
 const ScoringResult = require('../models/ScoringResult');
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// Initialize OpenAI client INSIDE functions, not at module level
+// This ensures environment variables are loaded first
 
 // Main lead scoring function - COMPLETE IMPLEMENTATION
 const runScoring = async (req, res) => {
   try {
+    // Initialize OpenAI client here (after env vars are loaded)
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
+
     // Get active offer for scoring criteria with timeout
     const offer = await Offer.findOne({ is_active: true })
       .maxTimeMS(20000);
