@@ -1,0 +1,31 @@
+
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:6.0
+    container_name: lead-scoring-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: lead-scoring
+    volumes:
+      - mongo_data:/data/db
+
+  # API Service
+  api:
+    build: .
+    container_name: lead-scoring-api
+    ports:
+        - "3001:3000" 
+    environment:
+      MONGO_URI: mongodb://mongodb:27017/lead-scoring
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PORT: 3000
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      - mongodb
+
+volumes:
+  mongo_data:
