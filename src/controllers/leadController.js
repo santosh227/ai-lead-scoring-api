@@ -14,13 +14,15 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
+    // Create unique filename with timestamp
     cb(null, `leads-${Date.now()}-${file.originalname}`);
   },
 });
-// upload  
+
+// Configure multer with file validation
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // file-size - 5MB
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
     if (
       file.mimetype === "text/csv" ||
@@ -32,7 +34,8 @@ const upload = multer({
     }
   },
 });
-// upload the csv file 
+
+// Upload and process CSV file
 const uploadCSV = [
   upload.single("file"),
   async (req, res) => {
@@ -47,10 +50,11 @@ const uploadCSV = [
       const leads = [];
       const batchId = new Date().getTime().toString();
 
-      // Parse CSV
+      // Parse CSV file
       fs.createReadStream(req.file.path)
         .pipe(csv())
         .on("data", (row) => {
+          // Normalize column headers
           const normalizedRow = {};
           Object.keys(row).forEach((key) => {
             const normalizedKey = key.toLowerCase().trim();
@@ -65,13 +69,13 @@ const uploadCSV = [
             // Clean up uploaded file
             fs.unlinkSync(req.file.path);
 
-            // Validate CSV structure
             if (leads.length === 0) {
               return res.status(400).json({
                 error: "Empty CSV file",
               });
             }
 
+            // Validate required columns
             const requiredColumns = [
               "name",
               "role",
@@ -92,7 +96,7 @@ const uploadCSV = [
               });
             }
 
-            // Save leads to database
+            // Prepare leads for database
             const leadsToSave = leads.map((lead) => ({
               name: lead.name,
               role: lead.role,
@@ -103,9 +107,9 @@ const uploadCSV = [
               upload_batch_id: batchId,
             }));
 
+            // Save to database
             const savedLeads = await Lead.insertMany(leadsToSave);
        
-
             res.status(200).json({
               message: "CSV uploaded successfully",
               data: {
@@ -116,7 +120,6 @@ const uploadCSV = [
               next_step: "Run scoring using POST /api/score",
             });
           } catch (error) {
-            
             res.status(500).json({
               error: "Failed to process CSV",
               message: error.message,

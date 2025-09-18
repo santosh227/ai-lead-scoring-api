@@ -3,14 +3,15 @@ const Offer = require('../models/Offer');
 const Lead = require('../models/Lead');
 const ScoringResult = require('../models/ScoringResult');
 
-// OpenAI setup
+// Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+// Main lead scoring function
 const runScoring = async (req, res) => {
   try {
-    // Get active offer
+    // Get active offer for scoring criteria
     const offer = await Offer.findOne({ is_active: true });
     if (!offer) {
       return res.status(400).json({
@@ -29,8 +30,6 @@ const runScoring = async (req, res) => {
     }
 
     const leads = await Lead.find({ upload_batch_id: latestLead.upload_batch_id });
-    
-
     const sessionId = new Date().getTime().toString();
     const results = [];
 
@@ -38,12 +37,11 @@ const runScoring = async (req, res) => {
     for (let i = 0; i < leads.length; i++) {
       const lead = leads[i];
      
-
       try {
         // Rule-based scoring (max 50 points)
         let ruleScore = 0;
 
-        // Role scoring (20 points)
+        // Role scoring (20 points max)
         const role = lead.role.toLowerCase();
         if (role.includes('ceo') || role.includes('founder') || role.includes('director')) {
           ruleScore += 20;
@@ -51,7 +49,7 @@ const runScoring = async (req, res) => {
           ruleScore += 10;
         }
 
-        // Industry scoring (20 points)
+        // Industry scoring (20 points max)
         const industry = lead.industry.toLowerCase();
         const useCases = offer.ideal_use_cases.join(' ').toLowerCase();
         if (industry.includes('saas') && useCases.includes('saas')) {
@@ -60,17 +58,18 @@ const runScoring = async (req, res) => {
           ruleScore += 10;
         }
 
-        // Completeness scoring (10 points)
+        // Completeness scoring (10 points max)
         const fields = [lead.name, lead.role, lead.company, lead.industry, lead.location];
         if (fields.every(f => f && f.trim())) {
           ruleScore += 10;
         }
 
         // AI scoring (max 50 points)
-        let aiScore = 30; // default
+        let aiScore = 30; // Default fallback
         let aiReasoning = 'Standard scoring applied';
 
         try {
+          // Create prompt for OpenAI analysis
           const prompt = `
 Analyze this lead for buying intent:
 
@@ -83,6 +82,7 @@ Classify as High, Medium, or Low intent and explain briefly.
 Format: "Intent: [High/Medium/Low]. Reasoning: [explanation]"
           `.trim();
 
+          // Call OpenAI API
           const response = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
             messages: [
@@ -102,7 +102,7 @@ Format: "Intent: [High/Medium/Low]. Reasoning: [explanation]"
           const aiText = response.choices[0].message.content;
           aiReasoning = aiText;
 
-          // Parse AI response
+          // Parse AI response for scoring
           if (aiText.toLowerCase().includes('high')) {
             aiScore = 50;
           } else if (aiText.toLowerCase().includes('low')) {
@@ -119,7 +119,7 @@ Format: "Intent: [High/Medium/Low]. Reasoning: [explanation]"
         const totalScore = Math.min(100, ruleScore + aiScore);
         const intent = totalScore >= 70 ? 'High' : totalScore >= 40 ? 'Medium' : 'Low';
 
-        // Create result
+        // Create result document
         const result = new ScoringResult({
           lead_data: {
             name: lead.name,
@@ -141,7 +141,7 @@ Format: "Intent: [High/Medium/Low]. Reasoning: [explanation]"
 
       } catch (error) {
         console.error(`Error scoring ${lead.name}:`, error);
-        // Create fallback result
+        // Create fallback result if scoring fails
         const fallbackResult = new ScoringResult({
           lead_data: {
             name: lead.name,
@@ -163,9 +163,7 @@ Format: "Intent: [High/Medium/Low]. Reasoning: [explanation]"
       }
     }
 
-   
-
-    // Generate summary
+    // Generate summary statistics
     const summary = {
       total_leads: results.length,
       high_intent: results.filter(r => r.intent === 'High').length,
@@ -184,7 +182,6 @@ Format: "Intent: [High/Medium/Low]. Reasoning: [explanation]"
     });
 
   } catch (error) {
-    
     res.status(500).json({
       error: 'Scoring failed',
       message: error.message
@@ -192,6 +189,7 @@ Format: "Intent: [High/Medium/Low]. Reasoning: [explanation]"
   }
 };
 
+// Get latest scoring results
 const getResults = async (req, res) => {
   try {
     // Get latest session results
@@ -204,10 +202,11 @@ const getResults = async (req, res) => {
       });
     }
 
+    // Fetch results sorted by score
     const results = await ScoringResult.find({ session_id: latestResult.session_id })
       .sort({ total_score: -1 });
 
-    // Format results for clean response
+    // Format results for API response
     const formattedResults = results.map(result => ({
       name: result.lead_data.name,
       role: result.lead_data.role,
@@ -226,7 +225,6 @@ const getResults = async (req, res) => {
     });
 
   } catch (error) {
-    
     res.status(500).json({
       error: 'Failed to get results',
       message: error.message
@@ -234,6 +232,7 @@ const getResults = async (req, res) => {
   }
 };
 
+// Export results as CSV
 const exportCSV = async (req, res) => {
   try {
     // Get latest results
@@ -249,7 +248,7 @@ const exportCSV = async (req, res) => {
     const results = await ScoringResult.find({ session_id: latestResult.session_id })
       .sort({ total_score: -1 });
 
-    // Generate CSV
+    // Generate CSV content
     const headers = ['name', 'role', 'company', 'industry', 'location', 'score', 'intent', 'reasoning'];
     const csvHeader = headers.join(',') + '\n';
     
@@ -262,7 +261,7 @@ const exportCSV = async (req, res) => {
         result.lead_data.location,
         result.total_score,
         result.intent,
-        `"${result.reasoning.replace(/"/g, '""')}"`
+        `"${result.reasoning.replace(/"/g, '""')}"` // Escape quotes in reasoning
       ];
       return row.join(',');
     }).join('\n');
@@ -271,15 +270,13 @@ const exportCSV = async (req, res) => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `lead-scoring-results-${timestamp}.csv`;
 
+    // Set download headers
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     
-  
     res.send(csvContent);
 
   } catch (error) {
-    
-
     res.status(500).json({
       error: 'Failed to export CSV',
       message: error.message

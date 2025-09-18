@@ -1,10 +1,11 @@
 const Offer = require("../models/Offer");
 
+// Create new product offer
 const createOffer = async (req, res) => {
   try {
     const { name, value_props, ideal_use_cases } = req.body;
 
-    // Basic validation
+    // Validate required fields
     if (!name || !value_props || !ideal_use_cases) {
       return res.status(400).json({
         error: "Missing required fields: name, value_props, ideal_use_cases",
@@ -17,7 +18,7 @@ const createOffer = async (req, res) => {
       });
     }
 
-    // Deactivate previous offers
+    // Deactivate previous offers (only one active at a time)
     await Offer.updateMany({}, { is_active: false });
 
     // Create new offer
